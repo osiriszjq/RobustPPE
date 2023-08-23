@@ -14,7 +14,7 @@ This is the official implementation of the paper "Robust Point Cloud Processing 
 
 
 #### Illustration of different methods to extend 1D encoding
-![Illustration of different methods to extend 1D encoding](imgs/method.pdf)
+![Illustration of different methods to extend 1D encoding](imgs/method.png)
 
 
 ## Getting Started
