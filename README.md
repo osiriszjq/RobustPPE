@@ -57,7 +57,7 @@ ModelNet40-C can be found in [Benchmarking Robustness of 3D Point Cloud Recognit
 ```
 ./download.sh modelnet40_c
 ```
-You can download our modified ModelNet40-C from [Google Drive](https://drive.google.com/drive/folders/106mMblD3HP93vhauG4PMirx01WP2j24y?usp=sharing).
+You can download our modified ModelNet40-C from [Google Drive](https://drive.google.com/drive/folders/106mMblD3HP93vhauG4PMirx01WP2j24y?usp=sharing) and put them under `data/`.
 
  
 ## Running Experiments
@@ -77,7 +77,7 @@ To test a pretrained model with different corruptions, use command in the follow
 python main.py --entry test --model-path <cor_exp/runs>/<cfg_name>/<model_name>.pth --exp-config configs/corruptions/<cfg_name>.yaml
 ```
 
-The evaluation commands we use is in the `eval_cor_modelnet40c.sh`, ``eval_cor_modelnet40c_our.sh`, `eval_tent_cutmix.sh` scripts.
+The evaluation commands we use are in the `eval_cor_modelnet40c.sh`, `eval_cor_modelnet40c_our.sh` scripts.
 
 ## Citation
 Please cite our paper and SimpleView if you use our benchmark and analysis results. Thank you!
