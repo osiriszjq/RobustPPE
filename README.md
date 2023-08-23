@@ -19,51 +19,25 @@ This is the official implementation of the paper "Robust Point Cloud Processing 
 
 ## Getting Started
 
-The environment is same as [Benchmarking Robustness of 3D Point Cloud Recognition against Common Corruptions](https://github.com/jiachens/ModelNet40-C). The core steps are listed below.
 #### Install Libraries
-Install [Anaconda](https://anaconda.org/) and create a virtual environment.
+The environment is same as [Benchmarking Robustness of 3D Point Cloud Recognition against Common Corruptions](https://github.com/jiachens/ModelNet40-C). The core steps are listed below.
 ```
 conda create --name modelnetc python=3.7.5
-```
-
-Activate the virtual environment and install the libraries.
-```
 conda activate modelnetc
 pip install -r requirements.txt
 conda install sed  # for downloading data and pretrained models
-```
-
-For PointNet++, we need to install custom CUDA modules. Make sure you have access to a GPU during this step. You might need to set the appropriate `TORCH_CUDA_ARCH_LIST` environment variable depending on your GPU model. The following command should work for most cases `export TORCH_CUDA_ARCH_LIST="6.0;6.1;6.2;7.0;7.5"`. However, if the install fails, check if `TORCH_CUDA_ARCH_LIST` is correctly set. More details could be found [here](https://en.wikipedia.org/wiki/CUDA#GPUs_supported).
-
-Third-party modules `pointnet2_pyt`, `PCT_Pytorch`, `emd`, and `PyGeM` can be installed by the following script.
-
-```
 ./setup.sh
 ```
 
 #### Datasets
-To download ModelNet40 execute the following command. This will download the ModelNet40 point cloud dataset released with pointnet++ as well as the validation splits used in our work.
-```
-./download.sh modelnet40
-```
-To generate the ModelNet40-C dataset, please run:
-```
-python data/process.py
-python data/generate_c.py
-```
-NOTE that the generation needs a monitor connected since Open3D library does not support background rendering. 
-
-ModelNet40-C can be found in [Benchmarking Robustness of 3D Point Cloud Recognition against Common Corruptions](https://github.com/jiachens/ModelNet40-C). If you download ModelNet40-C directly, please fill this [Google form](https://docs.google.com/forms/d/e/1FAIpQLSdrzt8EtQdjGMlwIwWAzb39KzzVzijpK6-sPEaps07MjQwGGQ/viewform?usp=sf_link) as they required when you execute the following command.
-```
-./download.sh modelnet40_c
-```
+You can download ModelNet40 and ModelNet40-C from [Benchmarking Robustness of 3D Point Cloud Recognition against Common Corruptions](https://github.com/jiachens/ModelNet40-C).
 You can download our modified ModelNet40-C from [Google Drive](https://drive.google.com/drive/folders/106mMblD3HP93vhauG4PMirx01WP2j24y?usp=sharing) and put them under `data/`.
 
  
 ## Running Experiments
 
 #### Training and Config files
-To train or test any model, we use the `main.py` script. The format for running this script is as follows. 
+To train any model, use command in the following format. 
 ```
 python main.py --exp-config <path to the config>
 ```
