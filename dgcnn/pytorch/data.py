@@ -69,6 +69,7 @@ class ModelNet40(Dataset):
         self.data, self.label = load_data(data_path)
         self.num_points = num_points
         self.partition = partition
+        self.N = self.data.shape[-2]
 
     def __getitem__(self, item):
         pointcloud = self.data[item][:self.num_points]

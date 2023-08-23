@@ -1,0 +1,69 @@
+sudo: true
+dist: xenial
+  
+language: python
+
+service: docker
+
+jobs:
+    include:
+        - os: linux
+          python: 3.7
+          env: TOXENV=py37
+        - os: osx
+          osx_image: xcode12.2
+          language: generic
+          env: TOXENV=py37
+          
+before_script:
+    - "export DISPLAY=:99.0"
+    - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
+        sh -e /etc/init.d/xvfb start;
+        sleep 3;
+      fi
+
+before_install:
+    # We do this conditionally because it saves us some downloading if the
+    # version is the same.
+    - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
+        wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh;
+      else
+        brew update;
+        brew install python;
+        wget https://repo.continuum.io/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -O miniconda.sh;
+      fi
+    - chmod +x miniconda.sh
+    - bash miniconda.sh -b -p $HOME/miniconda
+    - export PATH="$HOME/miniconda/bin:$HOME/miniconda/lib:$PATH"
+    - hash -r
+    - conda config --set always_yes yes --set changeps1 no
+    - conda update -q conda
+    # Useful for debugging any issues with conda
+    - conda info -a
+    - conda config --add channels conda-forge
+
+install:
+    - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
+        conda create --yes -n test python=$TRAVIS_PYTHON_VERSION;
+      else
+        conda create --yes -n test python="3.7";
+      fi
+    - source activate test
+    - echo $LD_LIBRARY_PATH
+    - echo $DYLD_LIBRARY_PATH
+    - echo $PATH
+    - conda install --yes -c conda-forge pythonocc-core=7.4.0 numpy scipy matplotlib vtk nose setuptools coveralls python=3.7
+    - python setup.py install
+
+script:
+    - coverage run test.py
+    # Docker in travis works only with linux. 
+    - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
+        docker run -u root docker.io/pygemdocker/pygem:latest /bin/sh -c "cd /home/PyGeM/build/PyGeM; coverage run test.py";
+      fi
+after_success:
+    - coveralls
+
+branches:
+    only:
+        - master

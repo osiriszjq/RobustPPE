@@ -6,6 +6,7 @@ import random
 from dataloader import create_dataloader
 from time import time
 from datetime import datetime
+import logging
 from progressbar import ProgressBar
 import models
 from collections import defaultdict
@@ -13,7 +14,8 @@ import os
 import numpy as np
 import argparse
 from all_utils import (
-    TensorboardManager, PerfTrackTrain,
+    # TensorboardManager, 
+    PerfTrackTrain,
     PerfTrackVal, TrackTrain, smooth_loss, DATASET_NUM_CLASS,
     rscnn_voting_evaluate_cls, pn2_vote_evaluate_cls)
 from configs import get_cfg_defaults
@@ -24,6 +26,7 @@ import aug_utils
 from third_party import bn_helper, tent_helper
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# DEVICE = torch.device('cpu')
 if DEVICE.type == 'cpu':
     print('WARNING: Using CPU')
 
@@ -100,8 +103,9 @@ def check_out_fmt(task, out, dataset_name):
 def get_inp(task, model, data_batch, batch_proc, dataset_name):
     check_inp_fmt(task, data_batch, dataset_name)
     if not batch_proc is None:
-        data_batch = batch_proc(data_batch, DEVICE)
+        data_batch = batch_proc(data_batch, DEVICE) # DEVICE is not using here but in.
         check_inp_fmt(task, data_batch, dataset_name)
+        
 
     if isinstance(model, nn.DataParallel):
         model_type = type(model.module)
@@ -109,7 +113,7 @@ def get_inp(task, model, data_batch, batch_proc, dataset_name):
         model_type = type(model)
 
     if task in ['cls', 'cls_trans']:
-        pc = data_batch['pc']
+        pc = data_batch['pc'].to(DEVICE)
         inp = {'pc': pc}
     else:
         assert False
@@ -211,6 +215,7 @@ def validate(task, loader, model, dataset_name, adapt = None, confusion = False)
     time_model = 0
     time_upd = 0
 
+    emb = []
     with torch.no_grad():
         bar = ProgressBar(max_value=len(loader))
         time5  = time()
@@ -226,7 +231,7 @@ def validate(task, loader, model, dataset_name, adapt = None, confusion = False)
                 model = adapt_bn(inp,model,adapt)
             elif adapt.METHOD == 'tent':
                 model = adapt_tent(inp,model,adapt)
-
+            
             out = model(**inp)
 
             if confusion:
@@ -254,12 +259,13 @@ def validate(task, loader, model, dataset_name, adapt = None, confusion = False)
         ground = torch.cat(ground).numpy()
         # print(ground)
         return perf.agg(), pred, ground
-
+    
+    
 def train(task, loader, model, optimizer, loss_name, dataset_name, cfg):
     model.train()
 
     def get_extra_param():
-       return None
+        return None
 
     perf = PerfTrackTrain(task, extra_param=get_extra_param())
     time_forward = 0
@@ -281,9 +287,11 @@ def train(task, loader, model, optimizer, loss_name, dataset_name, cfg):
         elif cfg.AUG.NAME == 'pgd':
             data_batch = aug_utils.pgd(data_batch,model, task, loss_name, dataset_name)
             model.train()
-        # print(data_batch)
+        # for key in data_batch.keys():
+        #     data_batch[key].to(DEVICE)
+
         inp = get_inp(task, model, data_batch, loader.dataset.batch_proc, dataset_name)
-        out = model(**inp)
+        out = model(inp['pc'])
         loss = get_loss(task, loss_name, data_batch, out, dataset_name)
 
         perf.update_all(data_batch=data_batch, out=out, loss=loss)
@@ -326,7 +334,10 @@ def train(task, loader, model, optimizer, loss_name, dataset_name, cfg):
 
 def save_checkpoint(id, epoch, model, optimizer,  lr_sched, bnm_sched, test_perf, cfg):
     model.cpu()
-    path = f"./runs/{cfg.EXP.EXP_ID}/model_{id}.pth"
+    if cfg.EXP.random_init:
+        path = f"./runs/{cfg.EXP.EXP_ID}_random/model_{id}.pth"
+    else:
+        path = f"./runs/{cfg.EXP.EXP_ID}/model_{id}.pth"
     torch.save({
         'cfg': vars(cfg),
         'epoch': epoch,
@@ -341,7 +352,10 @@ def save_checkpoint(id, epoch, model, optimizer,  lr_sched, bnm_sched, test_perf
 
 
 def load_best_checkpoint(model, cfg):
-    path = f"./runs/{cfg.EXP.EXP_ID}/model_best.pth"
+    if cfg.EXP.random_init:
+        path = f"./runs/{cfg.EXP.EXP_ID}_random/model_best.pth"
+    else:
+        path = f"./runs/{cfg.EXP.EXP_ID}/model_best.pth"
     checkpoint = torch.load(path)
     model.load_state_dict(checkpoint['model_state'])
     print('Checkpoint loaded from %s' % path)
@@ -395,11 +409,95 @@ def get_model(cfg):
     elif cfg.EXP.MODEL_NAME == 'pointnet':
         model = models.PointNet(
             task=cfg.EXP.TASK,
-            dataset=cfg.EXP.DATASET)
+            dataset=cfg.EXP.DATASET,
+            return_emb=cfg.EXP.RANK)
+    elif cfg.EXP.MODEL_NAME == 'pointnet_mean':
+        model = models.PointNetMean(
+            task=cfg.EXP.TASK,
+            dataset=cfg.EXP.DATASET,
+            return_emb=cfg.EXP.RANK)
+    elif cfg.EXP.MODEL_NAME == 'pointnetlinear':
+        model = models.PointNet(
+            task=cfg.EXP.TASK,
+            dataset=cfg.EXP.DATASET,
+            return_emb=cfg.EXP.RANK)
+    elif cfg.EXP.MODEL_NAME == 'pointnet_meanlinear':
+        model = models.PointNetMean(
+            task=cfg.EXP.TASK,
+            dataset=cfg.EXP.DATASET,
+            return_emb=cfg.EXP.RANK)
+    elif cfg.EXP.MODEL_NAME == 'pointnet6':
+        model = models.PointNet6(
+            task=cfg.EXP.TASK,
+            dataset=cfg.EXP.DATASET,
+            return_emb=cfg.EXP.RANK)
+    elif cfg.EXP.MODEL_NAME == 'pointnetmlp':
+        model = models.PointNetMLP(
+            task=cfg.EXP.TASK,
+            dataset=cfg.EXP.DATASET,
+            return_emb=cfg.EXP.RANK)
+    elif cfg.EXP.MODEL_NAME == 'pointnetmlpmean':
+        model = models.PointNetMLPMean(
+            task=cfg.EXP.TASK,
+            dataset=cfg.EXP.DATASET,
+            return_emb=cfg.EXP.RANK)
+    elif cfg.EXP.MODEL_NAME == 'pointnetmlp3':
+        model = models.PointNetMLP3(
+            task=cfg.EXP.TASK,
+            dataset=cfg.EXP.DATASET,
+            return_emb=cfg.EXP.RANK)
+    elif cfg.EXP.MODEL_NAME == 'pointnetmlp3mean':
+        model = models.PointNetMLP3Mean(
+            task=cfg.EXP.TASK,
+            dataset=cfg.EXP.DATASET,
+            return_emb=cfg.EXP.RANK)
+    elif cfg.EXP.MODEL_NAME == 'pointnetmlp3bn':
+        model = models.PointNetMLP3BN(
+            task=cfg.EXP.TASK,
+            dataset=cfg.EXP.DATASET,
+            return_emb=cfg.EXP.RANK)
+    elif cfg.EXP.MODEL_NAME == 'pointnetmlp3bnmean':
+        model = models.PointNetMLP3BNMean(
+            task=cfg.EXP.TASK,
+            dataset=cfg.EXP.DATASET,
+            return_emb=cfg.EXP.RANK)
+    elif cfg.EXP.MODEL_NAME == 'pointnet6_mean':
+        model = models.PointNet6Mean(
+            task=cfg.EXP.TASK,
+            dataset=cfg.EXP.DATASET,
+            return_emb=cfg.EXP.RANK)
     elif cfg.EXP.MODEL_NAME == 'pct':
         model = models.Pct(
             task=cfg.EXP.TASK,
             dataset=cfg.EXP.DATASET)
+    elif cfg.EXP.MODEL_NAME == 'pctc':
+        model = models.Pctc(
+            task=cfg.EXP.TASK,
+            dataset=cfg.EXP.DATASET)
+    elif cfg.EXP.MODEL_NAME == 'pctcmean':
+        model = models.Pctcmean(
+            task=cfg.EXP.TASK,
+            dataset=cfg.EXP.DATASET)
+    elif cfg.EXP.MODEL_NAME == 'peat':
+        model = models.peat(
+            task=cfg.EXP.TASK,
+            dataset=cfg.EXP.DATASET,
+            **cfg.MODEL.PCTE)
+    elif cfg.EXP.MODEL_NAME == 'peatmean':
+        model = models.peatmean(
+            task=cfg.EXP.TASK,
+            dataset=cfg.EXP.DATASET,
+            **cfg.MODEL.PCTE)
+    elif cfg.EXP.MODEL_NAME == 'pcte':
+        model = models.Pcte(
+            task=cfg.EXP.TASK,
+            dataset=cfg.EXP.DATASET,
+            **cfg.MODEL.PCTE)
+    elif cfg.EXP.MODEL_NAME == 'pctes':
+        model = models.Pctes(
+            task=cfg.EXP.TASK,
+            dataset=cfg.EXP.DATASET,
+            **cfg.MODEL.PCTES)
     elif cfg.EXP.MODEL_NAME == 'pointMLP':
         model = models.pointMLP(
             task=cfg.EXP.TASK,
@@ -416,6 +514,54 @@ def get_model(cfg):
         model = models.GDANET(
             task=cfg.EXP.TASK,
             dataset=cfg.EXP.DATASET)
+    elif cfg.EXP.MODEL_NAME == 'pemax':
+        model = models.PEMax(
+            task=cfg.EXP.TASK,
+            dataset=cfg.EXP.DATASET,
+            **cfg.MODEL.PEMax,
+            return_emb=cfg.EXP.RANK)
+    elif cfg.EXP.MODEL_NAME == 'pemean':
+        model = models.PEMean(
+            task=cfg.EXP.TASK,
+            dataset=cfg.EXP.DATASET,
+            **cfg.MODEL.PEMean,
+            return_emb=cfg.EXP.RANK)
+    elif cfg.EXP.MODEL_NAME == 'pemedian':
+        model = models.PEMedian(
+            task=cfg.EXP.TASK,
+            dataset=cfg.EXP.DATASET,
+            **cfg.MODEL.PEMedian,
+            return_emb=cfg.EXP.RANK)
+    elif cfg.EXP.MODEL_NAME == 'pemaxlinear':
+        model = models.PEMax(
+            task=cfg.EXP.TASK,
+            dataset=cfg.EXP.DATASET,
+            **cfg.MODEL.PEMax,
+            return_emb=cfg.EXP.RANK)
+    elif cfg.EXP.MODEL_NAME == 'pemeanlinear':
+        model = models.PEMean(
+            task=cfg.EXP.TASK,
+            dataset=cfg.EXP.DATASET,
+            **cfg.MODEL.PEMean,
+            return_emb=cfg.EXP.RANK)
+    elif cfg.EXP.MODEL_NAME == 'pemedianlinear':
+        model = models.PEMedian(
+            task=cfg.EXP.TASK,
+            dataset=cfg.EXP.DATASET,
+            **cfg.MODEL.PEMedian,
+            return_emb=cfg.EXP.RANK)
+    elif cfg.EXP.MODEL_NAME == 'pehist':
+        model = models.PEHist(
+            task=cfg.EXP.TASK,
+            dataset=cfg.EXP.DATASET,
+            **cfg.MODEL.PEHist,
+            return_emb=cfg.EXP.RANK)
+    elif cfg.EXP.MODEL_NAME == 'peransac':
+        model = models.PERansac(
+            task=cfg.EXP.TASK,
+            dataset=cfg.EXP.DATASET,
+            **cfg.MODEL.PERansac,
+            return_emb=cfg.EXP.RANK)
     else:
         assert False
 
@@ -469,9 +615,16 @@ def entry_train(cfg, resume=False, model_path=""):
 
     model = get_model(cfg)
     model.to(DEVICE)
+    
+    # if torch.cuda.device_count() > 1:
+    #      model = nn.DataParallel(model)
+    
+    if cfg.EXP.random_init:
+        print(2)
+        for param in model.model.feat.parameters():
+            param.requires_grad = False
+    
     print(model)
-    if torch.cuda.device_count() > 1:
-        model = nn.DataParallel(model)
 
     optimizer, lr_sched, bnm_sched = get_optimizer(cfg.EXP.OPTIMIZER, cfg.TRAIN, model)
 
@@ -481,10 +634,25 @@ def entry_train(cfg, resume=False, model_path=""):
         assert model_path == ""
 
 
-    log_dir = f"./runs/{cfg.EXP.EXP_ID}"
+    if cfg.EXP.random_init:
+        log_dir = f"./runs/{cfg.EXP.EXP_ID}_random"
+    else:
+        log_dir = f"./runs/{cfg.EXP.EXP_ID}"
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
-    tb = TensorboardManager(log_dir)
+    # tb = TensorboardManager(log_dir)
+    
+    timestr = str(datetime.now().strftime('%Y-%m-%d_%H-%M'))
+    logger = logging.getLogger(timestr)
+    logger.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    file_handler = logging.FileHandler('%s/%s.txt' % (log_dir, timestr))
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    logger.info('PARAMETER ...')
+    logger.info(cfg)
+    
     track_train = TrackTrain(early_stop_patience=cfg.TRAIN.early_stop)
 
     for epoch in range(cfg.TRAIN.num_epochs):
@@ -493,13 +661,16 @@ def entry_train(cfg, resume=False, model_path=""):
         print('Training..')
         train_perf, train_loss = train(cfg.EXP.TASK, loader_train, model, optimizer, cfg.EXP.LOSS_NAME, cfg.EXP.DATASET, cfg)
         pprint.pprint(train_perf, width=80)
-        tb.update('train', epoch, train_perf)
+        # tb.update('train', epoch, train_perf)
+        logger.info(train_perf)
 
         if (not cfg.EXP_EXTRA.no_val) and epoch % cfg.EXP_EXTRA.val_eval_freq == 0:
                 print('\nValidating..')
                 val_perf = validate(cfg.EXP.TASK, loader_valid, model, cfg.EXP.DATASET, cfg.ADAPT)
                 pprint.pprint(val_perf, width=80)
-                tb.update('val', epoch, val_perf)
+                # tb.update('val', epoch, val_perf)
+                logger.info(val_perf)
+                
         else:
             val_perf = defaultdict(float)
 
@@ -507,7 +678,8 @@ def entry_train(cfg, resume=False, model_path=""):
             print('\nTesting..')
             test_perf = validate(cfg.EXP.TASK, loader_test, model, cfg.EXP.DATASET, cfg.ADAPT)
             pprint.pprint(test_perf, width=80)
-            tb.update('test', epoch, test_perf)
+            # tb.update('test', epoch, test_perf)
+            logger.info(test_perf)
         else:
             test_perf = defaultdict(float)
 
@@ -519,14 +691,17 @@ def entry_train(cfg, resume=False, model_path=""):
 
         if (not cfg.EXP_EXTRA.no_val) and track_train.save_model(epoch_id=epoch, split='val'):
             print('Saving best model on the validation set')
+            logger.info('Saving best model on the validation set')
             save_checkpoint('best_val', epoch, model, optimizer,  lr_sched, bnm_sched, test_perf, cfg)
 
         if (not cfg.EXP_EXTRA.no_test) and track_train.save_model(epoch_id=epoch, split='test'):
             print('Saving best model on the test set')
+            logger.info('Saving best model on the test set')
             save_checkpoint('best_test', epoch, model, optimizer,  lr_sched, bnm_sched, test_perf, cfg)
 
         if (not cfg.EXP_EXTRA.no_val) and track_train.early_stop(epoch_id=epoch):
             print(f"Early stopping at {epoch} as val acc did not improve for {cfg.TRAIN.early_stop} epochs.")
+            logger.info(f"Early stopping at {epoch} as val acc did not improve for {cfg.TRAIN.early_stop} epochs.")
             break
 
         if (not (cfg.EXP_EXTRA.save_ckp == 0)) and (epoch % cfg.EXP_EXTRA.save_ckp == 0):
@@ -539,13 +714,16 @@ def entry_train(cfg, resume=False, model_path=""):
             lr_sched.step()
 
     print('Saving the final model')
+    logger.info('Saving the final model')
     save_checkpoint('final', epoch, model, optimizer,  lr_sched, bnm_sched, test_perf, cfg)
 
     print('\nTesting on the final model..')
+    logger.info('\nTesting on the final model..')
     last_test_perf = validate(cfg.EXP.TASK, loader_test, model, cfg.EXP.DATASET, cfg.ADAPT)
     pprint.pprint(last_test_perf, width=80)
+    logger.info(last_test_perf)
 
-    tb.close()
+    # tb.close()
 
 
 def entry_test(cfg, test_or_valid, model_path="", confusion = False):
@@ -555,8 +733,8 @@ def entry_test(cfg, test_or_valid, model_path="", confusion = False):
     model = get_model(cfg)
     model.to(DEVICE)
     print(model)
-    if torch.cuda.device_count() > 1:
-        model = nn.DataParallel(model)
+    # if torch.cuda.device_count() > 1:
+    #     model = nn.DataParallel(model)
 
     optimizer, lr_sched, bnm_sched = get_optimizer(cfg.EXP.OPTIMIZER, cfg.TRAIN, model)
     model = load_model_opt_sched(model, optimizer, lr_sched, bnm_sched, model_path)
@@ -573,6 +751,22 @@ def entry_test(cfg, test_or_valid, model_path="", confusion = False):
     print("Model: {} Corruption: {} Severity: {} Acc: {} Class Acc: {}".format(cfg.EXP.MODEL_NAME, cfg.DATALOADER.MODELNET40_C.corruption, cfg.DATALOADER.MODELNET40_C.severity,test_perf['acc'],test_perf['class_acc']),file=file_object,flush=True)
     pprint.pprint(test_perf, width=80)
     return test_perf
+
+
+
+
+class UniformCoordinateDataset(torch.utils.data.Dataset):
+    def __init__(self, N):
+        x1 = np.linspace(-1.0, 1.0, N+1)
+        all_data = np.stack(np.meshgrid(x1,x1,x1), axis=-1)
+        self.data = np.expand_dims(all_data.reshape(-1,3),axis=1)
+    
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, i):
+        
+        return self.data[i]
 
 
 def rscnn_vote_evaluation(cfg, model_path, log_file):
@@ -633,11 +827,17 @@ if __name__ == '__main__':
                         help="Which corruption to use")
     parser.add_argument('--output',type=str,default='./test.txt',
                         help="path to output file")
+    parser.add_argument('--iid',type=int,default=1,
+                        help="Which test data to use")
     parser.add_argument('--severity',type=int,default=1,
                         help="Which severity to use")
 
     parser.add_argument('--confusion', action="store_true", default=False,
                         help="whether to output confusion matrix data")
+    
+    
+    parser.add_argument('--random_init', action="store_true", default=False,
+                        help="whether to train the encoder")
 
 
     cmd_args = parser.parse_args()
@@ -652,6 +852,9 @@ if __name__ == '__main__':
         cfg.merge_from_file(cmd_args.exp_config)
         if cfg.EXP.EXP_ID == "":
             cfg.EXP.EXP_ID = str(datetime.now())[:-7].replace(' ', '-')
+        if cmd_args.random_init:
+            print(1)
+            cfg.EXP.random_init = True
         cfg.freeze()
         print(cfg)
 
@@ -662,13 +865,19 @@ if __name__ == '__main__':
         entry_train(cfg, cmd_args.resume, cmd_args.model_path)
 
     elif cmd_args.entry in ["test", "valid"]:
-        file_object = open(cmd_args.output, 'a')
+        file_object = open(cmd_args.output, 'w')
         assert not cmd_args.exp_config == ""
         assert not cmd_args.model_path == ""
 
         cfg = get_cfg_defaults()
         cfg.merge_from_file(cmd_args.exp_config)
+        
+            
         if cfg.EXP.DATASET == "modelnet40_c":
+            if cmd_args.iid==0:
+                cfg.DATALOADER.MODELNET40_C.test_data_path  = './data/modelnet40_c'
+            else:
+                cfg.DATALOADER.MODELNET40_C.test_data_path  = './data/modelnet40_c_f' + str(cmd_args.iid)
             cfg.DATALOADER.MODELNET40_C.corruption = cmd_args.corruption
             cfg.DATALOADER.MODELNET40_C.severity = cmd_args.severity
         cfg.freeze()
@@ -680,6 +889,7 @@ if __name__ == '__main__':
 
         test_or_valid = cmd_args.entry == "test"
         entry_test(cfg, test_or_valid, cmd_args.model_path,cmd_args.confusion)
+
 
     elif cmd_args.entry in ["rscnn_vote", "pn2_vote"]:
         assert not cmd_args.exp_config == ""

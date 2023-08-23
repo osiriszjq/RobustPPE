@@ -1,10 +1,3 @@
-###
- # @Description: 
- # @Autor: Jiachen Sun
- # @Date: 2022-02-16 22:23:16
- # @LastEditors: Jiachen Sun
- # @LastEditTime: 2022-02-17 13:09:42
-### 
 wgetgdrive(){
 
   # $1 = file ID
@@ -18,22 +11,22 @@ wgetgdrive(){
 mkdir -p tmp
 key="$1"
 case $key in
-	pretrained)
-		wgetgdrive 1qSkMYYK1qkT4wMMeAXerSI2Q7AxWujsS tmp/pretrained.zip
-		unzip -o tmp/pretrained.zip
-		;;
-	runs)
-		mkdir -p runs 
-		cd runs
-		python ../gdrivedl.py https://drive.google.com/drive/folders/1UT-OfAsQ1OGSa6HSLZcK6YyJeIkaJUfF?usp=sharing 
-    	cd ..
-		;;
-	cor_exp)
-		mkdir -p cor_exp 
-		cd cor_exp
-		python ../gdrivedl.py https://drive.google.com/drive/folders/1iYcJwFCFm9JWSiL1puIVfjpEgNF2dSoy?usp=sharing 
-    	cd ..	
-		;;
+	# pretrained)
+	# 	wgetgdrive 1qSkMYYK1qkT4wMMeAXerSI2Q7AxWujsS tmp/pretrained.zip
+	# 	unzip -o tmp/pretrained.zip
+	# 	;;
+	# runs)
+	# 	mkdir -p runs 
+	# 	cd runs
+	# 	python ../gdrivedl.py https://drive.google.com/drive/folders/1UT-OfAsQ1OGSa6HSLZcK6YyJeIkaJUfF?usp=sharing 
+    # 	cd ..
+	# 	;;
+	# cor_exp)
+	# 	mkdir -p cor_exp 
+	# 	cd cor_exp
+	# 	python ../gdrivedl.py https://drive.google.com/drive/folders/1iYcJwFCFm9JWSiL1puIVfjpEgNF2dSoy?usp=sharing 
+    # 	cd ..	
+	# 	;;
 	modelnet40_c)
 		mkdir -p data/modelnet40_c
 		cd data/modelnet40_c

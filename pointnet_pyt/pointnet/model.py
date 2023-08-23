@@ -85,7 +85,7 @@ class STNkd(nn.Module):
         return x
 
 class PointNetfeat(nn.Module):
-    def __init__(self, global_feat = True, feature_transform = False):
+    def __init__(self, global_feat = True, feature_transform = False, pooling='max'):
         super(PointNetfeat, self).__init__()
         self.stn = STN3d()
         self.conv1 = torch.nn.Conv1d(3, 64, 1)
@@ -98,6 +98,8 @@ class PointNetfeat(nn.Module):
         self.feature_transform = feature_transform
         if self.feature_transform:
             self.fstn = STNkd(k=64)
+            
+        self.pooling = pooling
 
     def forward(self, x):
         n_pts = x.size()[2]
@@ -117,20 +119,23 @@ class PointNetfeat(nn.Module):
 
         pointfeat = x
         x = F.relu(self.bn2(self.conv2(x)))
-        x = self.bn3(self.conv3(x))
-        x = torch.max(x, 2, keepdim=True)[0]
+        emb = self.bn3(self.conv3(x))
+        if self.pooling == 'max':
+            x = torch.max(emb, 2, keepdim=True)[0]
+        elif self.pooling == 'mean':
+            x = torch.mean(emb, 2, keepdim=True)
         x = x.view(-1, 1024)
         if self.global_feat:
-            return x, trans, trans_feat
+            return x, trans, trans_feat,emb
         else:
             x = x.view(-1, 1024, 1).repeat(1, 1, n_pts)
             return torch.cat([x, pointfeat], 1), trans, trans_feat
 
 class PointNetCls(nn.Module):
-    def __init__(self, k=2, feature_transform=False):
+    def __init__(self, k=2, feature_transform=False, pooling='max'):
         super(PointNetCls, self).__init__()
         self.feature_transform = feature_transform
-        self.feat = PointNetfeat(global_feat=True, feature_transform=feature_transform)
+        self.feat = PointNetfeat(global_feat=True, feature_transform=feature_transform, pooling=pooling)
         self.fc1 = nn.Linear(1024, 512)
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, k)
@@ -140,11 +145,11 @@ class PointNetCls(nn.Module):
         self.relu = nn.ReLU()
 
     def forward(self, x):
-        x, trans, trans_feat = self.feat(x)
+        x, trans, trans_feat,emb = self.feat(x)
         x = F.relu(self.bn1(self.fc1(x)))
         x = F.relu(self.bn2(self.dropout(self.fc2(x))))
         x = self.fc3(x)
-        return F.log_softmax(x, dim=1), trans, trans_feat
+        return F.log_softmax(x, dim=1), trans, trans_feat, emb
 
 
 class PointNetDenseCls(nn.Module):
