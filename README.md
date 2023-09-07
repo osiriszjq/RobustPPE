@@ -1,5 +1,5 @@
 # Robust Point Cloud Processing through Positional Embedding 
-### [Project Page](https://osiriszjq.github.io/RobustPPE) | [Paper]()
+### [Project Page](https://osiriszjq.github.io/RobustPPE) | [Paper](https://arxiv.org/pdf/2309.00339.pdf)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 
@@ -54,6 +54,13 @@ python main.py --entry test --model-path <cor_exp/runs>/<cfg_name>/<model_name>.
 The evaluation commands we use are in the `eval_cor_modelnet40c.sh`, `eval_cor_modelnet40c_our.sh` scripts.
 
 ## Citation
-Please cite our paper and SimpleView if you use our benchmark and analysis results. Thank you!
 ```
+@misc{zheng2023robust,
+      title={Robust Point Cloud Processing through Positional Embedding}, 
+      author={Jianqiao Zheng and Xueqian Li and Sameera Ramasinghe and Simon Lucey},
+      year={2023},
+      eprint={2309.00339},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV}
+}
 ```
