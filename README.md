@@ -1,1 +1,1 @@
-### Project website for arXiv paper "https://arxiv.org/pdf/2309.00339.pdf".
+### Project website for arXiv paper "Robust Point Cloud Processing through Positional Embedding".
